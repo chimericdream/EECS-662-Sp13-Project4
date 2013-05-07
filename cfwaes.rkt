@@ -1,119 +1,114 @@
 #lang plai
 ;;;;
-;; CFAER stuff
-(define-type CFAER
+;; CFAES stuff
+(define-type CFAES
     (numI (n number?))
-    (binopI (op symbol?) (lhs CFAER?) (rhs CFAER?))
-    (appI (fun-expr CFAER?) (arg-expr CFAER?))
-    (funI (param symbol?) (body CFAER?))
-    (if0I (test CFAER?) (iftrue CFAER?) (iffalse CFAER?))
-    (recI (name symbol?) (named-expr CFAER?) (body CFAER?))
+    (binopI (op symbol?) (lhs CFAES?) (rhs CFAES?))
+    (appI (fun-expr CFAES?) (arg-expr CFAES?))
+    (funI (param symbol?) (body CFAES?))
+    (if0I (test CFAES?) (iftrue CFAES?) (iffalse CFAES?))
     (idI (name symbol?)))
 
-(define interp-cfaer
-    (lambda (a-cfaer env)
-        (type-case CFAER a-cfaer
+(define interp-cfaes
+    (lambda (a-cfaes env sto)
+        (type-case CFAES a-cfaes
             (numI (x) (numV x))
             (binopI (op l r)
                 (numV ((lookup op ops)
-                    (numV-n (interp-cfaer l env))
-                    (numV-n (interp-cfaer r env)))))
+                    (numV-n (interp-cfaes l env sto))
+                    (numV-n (interp-cfaes r env sto)))))
             (appI (fun-expr arg-expr) 
-                (local ((define fun-val (interp-cfaer fun-expr env)))
-                    (interp-cfaer (closureV-body fun-val)
+                (local ((define fun-val (interp-cfaes fun-expr env sto)))
+                    (interp-cfaes
+                        (closureV-body fun-val)
                         (aSub (closureV-param fun-val)
-                            (interp-cfaer arg-expr env)
-                            (closureV-env fun-val)))))
-            (funI (bound-id bound-body) (closureV bound-id bound-body env))
+                            (interp-cfaes arg-expr env sto)
+                            (closureV-env fun-val))
+                        sto)))
+            (funI (bound-id bound-body) (closureV bound-id bound-body env sto))
             (if0I (test iftrue iffalse)
-                (if (zero? (numV-n (interp-cfaer test env)))
-                    (interp-cfaer iftrue env)
-                    (interp-cfaer iffalse env)))
-            (recI (bound-id named-expr bound-body)
-                (interp-cfaer bound-body
-                    (rec-bind-interp bound-id named-expr env)))
+                (if (zero? (numV-n (interp-cfaes test env sto)))
+                    (interp-cfaes iftrue env sto)
+                    (interp-cfaes iffalse env sto)))
             (idI (v) (envlookup v env)))))
 
-(define rec-bind-interp
-    (lambda (bound-id named-expr env)
-        (local
-            ((define value-holder (box (numV 9999)))
-                (define new-env (aRecSub bound-id value-holder env))
-                (define named-expr-val (interp-cfaer named-expr new-env)))
-            (begin
-                (set-box! value-holder named-expr-val) new-env))))
-
-(define-type CFAER-value
+(define-type CFAES-value
     (numV (n number?))
-    (closureV (param symbol?) (body CFAER?) (env Env?)))
-
-(define (boxed-CFAER-value? v)
-    (and (box? v) (CFAER-value? (unbox v))))
+    (closureV (param symbol?) (body CFAES?) (env Env?) (sto Store?)))
 
 ;;;;
-;; CFWAER stuff
+;; CFWAES stuff
 ;; The define-type and parser are (mostly) the versions given with the assignment
 ;;
-(define-type CFWAER
+(define-type CFWAES
     (num (n number?))
-    (binop (op symbol?) (lhs CFWAER?) (rhs CFWAER?))
-    (app (fun-expr CFWAER?) (arg-expr CFWAER?))
-    (fun (param symbol?) (body CFWAER?))
-    (with (name symbol?) (named-expr CFWAER?) (body CFWAER?))
-    (if0 (test CFWAER?) (iftrue CFWAER?) (iffalse CFWAER?))
-    (rec (name symbol?) (named-expr CFWAER?) (body CFWAER?))
+    (binop (op symbol?) (lhs CFWAES?) (rhs CFWAES?))
+    (app (fun-expr CFWAES?) (arg-expr CFWAES?))
+    (fun (param symbol?) (body CFWAES?))
+    (with (name symbol?) (named-expr CFWAES?) (body CFWAES?))
+    (if0 (test CFWAES?) (iftrue CFWAES?) (iffalse CFWAES?))
     (id (name symbol?)))
 
-(define elab-cfwaer
-    (lambda (a-cfwaer)
-        (type-case CFWAER a-cfwaer
+(define elab-cfwaes
+    (lambda (a-cfwaes)
+        (type-case CFWAES a-cfwaes
             (num (x) (numI x))
-            (binop (op l r) (binopI op (elab-cfwaer l) (elab-cfwaer r)))
-            (app (fun-expr arg-expr) (appI (elab-cfwaer fun-expr) (elab-cfwaer arg-expr)))
-            (fun (param body) (funI param (elab-cfwaer body)))
-            (with (name named-expr body) (appI (funI name (elab-cfwaer body)) (elab-cfwaer named-expr)))
-            (if0 (test iftrue iffalse) (if0I (elab-cfwaer test) (elab-cfwaer iftrue) (elab-cfwaer iffalse)))
-            (rec (name named-expr body) (recI name (elab-cfwaer named-expr) (elab-cfwaer body)))
+            (binop (op l r) (binopI op (elab-cfwaes l) (elab-cfwaes r)))
+            (app (fun-expr arg-expr) (appI (elab-cfwaes fun-expr) (elab-cfwaes arg-expr)))
+            (fun (param body) (funI param (elab-cfwaes body)))
+            (with (name named-expr body) (appI (funI name (elab-cfwaes body)) (elab-cfwaes named-expr)))
+            (if0 (test iftrue iffalse) (if0I (elab-cfwaes test) (elab-cfwaes iftrue) (elab-cfwaes iffalse)))
             (id (name) (idI name)))))
 
-(define parse-cfwaer
+(define parse-cfwaes
     (lambda (expr)
         (cond ((symbol? expr) (id expr))
             ((number? expr) (num expr))
             ((list? expr)
                 (case (car expr)
-                    ((-) (binop 'sub (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-                    ((+) (binop 'add (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-                    ((*) (binop 'mul (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-                    ((/) (binop 'div (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
+                    ((-) (binop 'sub (parse-cfwaes (cadr expr)) (parse-cfwaes (caddr expr))))
+                    ((+) (binop 'add (parse-cfwaes (cadr expr)) (parse-cfwaes (caddr expr))))
+                    ((*) (binop 'mul (parse-cfwaes (cadr expr)) (parse-cfwaes (caddr expr))))
+                    ((/) (binop 'div (parse-cfwaes (cadr expr)) (parse-cfwaes (caddr expr))))
                     ((with) (with (car (cadr expr)) 
-                        (parse-cfwaer (cadr (cadr expr))) 
-                        (parse-cfwaer (caddr expr))))
-                    ((rec) (rec (car (cadr expr)) 
-                        (parse-cfwaer (cadr (cadr expr))) 
-                        (parse-cfwaer (caddr expr))))
-                    ((if0) (if0 (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))
-                        (parse-cfwaer (cadddr expr))))
-                    ((fun) (fun (caadr expr) (parse-cfwaer (caddr expr))))
-                (else (app (parse-cfwaer (car expr)) (parse-cfwaer (cadr expr))))))
-            (else 'parse-cfwaer "Unexpected token"))))
+                        (parse-cfwaes (cadr (cadr expr))) 
+                        (parse-cfwaes (caddr expr))))
+                    ((if0) (if0 (parse-cfwaes (cadr expr)) (parse-cfwaes (caddr expr))
+                        (parse-cfwaes (cadddr expr))))
+                    ((fun) (fun (caadr expr) (parse-cfwaes (caddr expr))))
+                (else (app (parse-cfwaes (car expr)) (parse-cfwaes (cadr expr))))))
+            (else 'parse-cfwaes "Unexpected token"))))
 
 ; Since I am using an elaborator to eliminate the (with) part of the language,
-; the interpreter is in the CFAER section of the code. This function serves as a
-; wrapper for elaborating the CFWAER into a CFAER, then interpreting it
-(define interp-cfwaer (lambda (expr env) (interp-cfaer (elab-cfwaer expr) env)))
+; the interpreter is in the CFAES section of the code. This function serves as a
+; wrapper for elaborating the CFWAES into a CFAES, then interpreting it
+(define interp-cfwaes (lambda (expr env sto) (interp-cfaes (elab-cfwaes expr) env sto)))
 
-; Parse the expression, then pass it to the CFAER interpreter via the CFWAER
+; Parse the expression, then pass it to the CFAES interpreter via the CFWAES
 ; interpreter/elaborator
-(define eval-cfwaer (lambda (expr) (interp-cfwaer (parse-cfwaer expr) (mtSub))))
+(define eval-cfwaes (lambda (expr) (interp-cfwaes (parse-cfwaes expr) (mtSub) (mtSto))))
+
+;;;;
+;; The data store
+;;
+(define-type Store
+    (mtSto)
+    (aSto (name symbol?) (value CFAES-value?) (sto Store?)))
+
+(define (stolookup name sto)
+    (type-case Store sto
+        (mtSto () (error 'stolookup "Unbound identifier"))
+        (aSto (bound-name bound-value rest-sto)
+            (if (symbol=? bound-name name)
+                bound-value
+                (stolookup name rest-sto)))))
 
 ;;;;
 ;; Deferred substitution stuff
 ;;
 (define-type Env
     (mtSub)
-    (aSub (name symbol?) (value CFAER-value?) (env Env?))
-    (aRecSub (name symbol?) (value boxed-CFAER-value?) (env Env?)))
+    (aSub (name symbol?) (value CFAES-value?) (env Env?)))
 
 (define (envlookup name env)
     (type-case Env env
@@ -121,10 +116,6 @@
         (aSub (bound-name bound-value rest-env)
             (if (symbol=? bound-name name)
                 bound-value
-                (envlookup name rest-env)))
-        (aRecSub (bound-name boxed-bound-value rest-env)
-            (if (symbol=? bound-name name)
-                (unbox boxed-bound-value)
                 (envlookup name rest-env)))))
 
 ;;;;
@@ -159,88 +150,86 @@
 (lookup 'mul ops)
 (lookup 'div ops)
 
-;;;; Testing the complete evaluator for CFWAER
-(eval-cfwaer `{rec {fac {fun {n} {if0 n 1 {* n {fac {+ n -1}}}}}} {fac 5}})
-(eval-cfwaer `{+ 5 {- 3 2}})
-(eval-cfwaer `{+ 1 2})
-(eval-cfwaer `{+ {- {- 4 3} 15} {+ {+ {- 10 5} {- 3 2}} {- 15 42}}})
-(eval-cfwaer `{/ 50 5})
-(eval-cfwaer `{+ 1 2})
-(eval-cfwaer `{* 2 2})
-(eval-cfwaer `{if0 0 1 2})
-(eval-cfwaer `{with {x 5} x})
-(eval-cfwaer `{with {x 1} {+ x 1}})
-(eval-cfwaer `{if0 {with {x 3} {- x 2}} {with {x 10} {* x 2}} {with {x 8} {/ x 2}}})
-(eval-cfwaer `{with {x 2} {with {y 3} {+ x y}}})
-(eval-cfwaer `{fun {x} {+ x 1}})
-(eval-cfwaer `{fun {x} x})
+;;;; Testing the complete evaluator for CFWAES
+(eval-cfwaes `{+ 5 {- 3 2}})
+(eval-cfwaes `{+ 1 2})
+(eval-cfwaes `{+ {- {- 4 3} 15} {+ {+ {- 10 5} {- 3 2}} {- 15 42}}})
+(eval-cfwaes `{/ 50 5})
+(eval-cfwaes `{+ 1 2})
+(eval-cfwaes `{* 2 2})
+(eval-cfwaes `{if0 0 1 2})
+(eval-cfwaes `{with {x 5} x})
+(eval-cfwaes `{with {x 1} {+ x 1}})
+(eval-cfwaes `{if0 {with {x 3} {- x 2}} {with {x 10} {* x 2}} {with {x 8} {/ x 2}}})
+(eval-cfwaes `{with {x 2} {with {y 3} {+ x y}}})
+(eval-cfwaes `{fun {x} {+ x 1}})
+(eval-cfwaes `{fun {x} x})
 
-;;;; Testing the parser for CFWAER
-(parse-cfwaer `{rec {fac {fun {n} {if0 n 1 {* n {fac {+ n -1}}}}}} {fac 5}})
-(parse-cfwaer `{+ 5 {- 3 2}})
-(parse-cfwaer `{+ 1 2})
-(parse-cfwaer `{+ {- {- 4 3} 15} {+ {+ {- 10 5} {- 3 2}} {- 15 42}}})
-(parse-cfwaer `{/ 50 5})
-(parse-cfwaer `{+ 1 2})
-(parse-cfwaer `{* 2 2})
-(parse-cfwaer `{if0 0 1 2})
-(parse-cfwaer `{with {x 5} x})
-(parse-cfwaer `{with {x 1} {+ x 1}})
-(parse-cfwaer `{if0 {with {x 3} {- x 2}} {with {x 10} {* x 2}} {with {x 8} {/ x 2}}})
-(parse-cfwaer `{with {x 2} {with {y 3} {+ x y}}})
-(parse-cfwaer `{fun {x} {+ x 1}})
-(parse-cfwaer `{fun {x} x})
+;;;; Testing the parser for CFWAES
+(parse-cfwaes `{+ 5 {- 3 2}})
+(parse-cfwaes `{+ 1 2})
+(parse-cfwaes `{+ {- {- 4 3} 15} {+ {+ {- 10 5} {- 3 2}} {- 15 42}}})
+(parse-cfwaes `{/ 50 5})
+(parse-cfwaes `{+ 1 2})
+(parse-cfwaes `{* 2 2})
+(parse-cfwaes `{if0 0 1 2})
+(parse-cfwaes `{with {x 5} x})
+(parse-cfwaes `{with {x 1} {+ x 1}})
+(parse-cfwaes `{if0 {with {x 3} {- x 2}} {with {x 10} {* x 2}} {with {x 8} {/ x 2}}})
+(parse-cfwaes `{with {x 2} {with {y 3} {+ x y}}})
+(parse-cfwaes `{fun {x} {+ x 1}})
+(parse-cfwaes `{fun {x} x})
 
-;;;; Testing the elaborator from CFWAER to CFAER
-(elab-cfwaer (binop 'add (num 1) (num 2)))
-(elab-cfwaer (binop 'add (binop 'sub (binop 'sub (num 4) (num 3)) (num 15)) (binop 'add (binop 'add (binop 'sub (num 10) (num 5)) (binop 'sub (num 3) (num 2))) (binop 'sub (num 15) (num 42)))))
-(elab-cfwaer (binop 'div (num 50) (num 5)))
-(elab-cfwaer (binop 'add (num 1) (num 2)))
-(elab-cfwaer (binop 'mul (num 2) (num 2)))
-(elab-cfwaer (if0 (num 0) (num 1) (num 2)))
-(elab-cfwaer (app (fun 'x (id 'x)) (num 5)))
-(elab-cfwaer (app (fun 'x (binop 'add (id 'x) (num 1))) (num 1)))
-(elab-cfwaer (if0 (app (fun 'x (binop 'sub (id 'x) (num 2))) (num 3)) (app (fun 'x (binop 'mul (id 'x) (num 2))) (num 10)) (app (fun 'x (binop 'div (id 'x) (num 2))) (num 8))))
-(elab-cfwaer (app (if0 (num 0) (fun 'x (binop 'add (id 'x) (num 1))) (fun 'x (binop 'add (id 'x) (num 2)))) (num 0)))
-(elab-cfwaer (app (fun 'x (app (fun 'y (binop 'add (id 'x) (id 'y))) (num 3))) (num 2)))
-(elab-cfwaer (fun 'x (binop 'add (id 'x) (num 1))))
-(elab-cfwaer (fun 'x (id 'x)))
+;;;; Testing the elaborator from CFWAES to CFAES
+(elab-cfwaes (binop 'add (num 1) (num 2)))
+(elab-cfwaes (binop 'add (binop 'sub (binop 'sub (num 4) (num 3)) (num 15)) (binop 'add (binop 'add (binop 'sub (num 10) (num 5)) (binop 'sub (num 3) (num 2))) (binop 'sub (num 15) (num 42)))))
+(elab-cfwaes (binop 'div (num 50) (num 5)))
+(elab-cfwaes (binop 'add (num 1) (num 2)))
+(elab-cfwaes (binop 'mul (num 2) (num 2)))
+(elab-cfwaes (if0 (num 0) (num 1) (num 2)))
+(elab-cfwaes (app (fun 'x (id 'x)) (num 5)))
+(elab-cfwaes (app (fun 'x (binop 'add (id 'x) (num 1))) (num 1)))
+(elab-cfwaes (if0 (app (fun 'x (binop 'sub (id 'x) (num 2))) (num 3)) (app (fun 'x (binop 'mul (id 'x) (num 2))) (num 10)) (app (fun 'x (binop 'div (id 'x) (num 2))) (num 8))))
+(elab-cfwaes (app (if0 (num 0) (fun 'x (binop 'add (id 'x) (num 1))) (fun 'x (binop 'add (id 'x) (num 2)))) (num 0)))
+(elab-cfwaes (app (fun 'x (app (fun 'y (binop 'add (id 'x) (id 'y))) (num 3))) (num 2)))
+(elab-cfwaes (fun 'x (binop 'add (id 'x) (num 1))))
+(elab-cfwaes (fun 'x (id 'x)))
 
-;;;; Testing the interpreter for CFAER
+;;;; Testing the interpreter for CFAES
 ; (((4 - 3) - 15) + (((10 - 5) + (3 - 2)) + (15 - 42))) = (1 - 15) + (6 + (-27)) = -14 + (-21) = -35
-(interp-cfaer (binopI 'add (binopI 'sub (binopI 'sub (numI 4) (numI 3)) (numI 15)) (binopI 'add (binopI 'add (binopI 'sub (numI 10) (numI 5)) (binopI 'sub (numI 3) (numI 2))) (binopI 'sub (numI 15) (numI 42)))) (mtSub))
+(interp-cfaes (binopI 'add (binopI 'sub (binopI 'sub (numI 4) (numI 3)) (numI 15)) (binopI 'add (binopI 'add (binopI 'sub (numI 10) (numI 5)) (binopI 'sub (numI 3) (numI 2))) (binopI 'sub (numI 15) (numI 42)))) (mtSub) (mtSto))
 
 ; 50 / 5 = 10
-(interp-cfaer (binopI 'div (numI 50) (numI 5)) (mtSub))
+(interp-cfaes (binopI 'div (numI 50) (numI 5)) (mtSub) (mtSto))
 
 ; 1 + 2 = 3
-(interp-cfaer (binopI 'add (numI 1) (numI 2)) (mtSub))
+(interp-cfaes (binopI 'add (numI 1) (numI 2)) (mtSub) (mtSto))
 
 ; 2 + 2 = 4
-(interp-cfaer (binopI 'mul (numI 2) (numI 2)) (mtSub))
+(interp-cfaes (binopI 'mul (numI 2) (numI 2)) (mtSub) (mtSto))
 
 ; 0 == 0 => 1
-(interp-cfaer (if0I (numI 0) (numI 1) (numI 2)) (mtSub))
+(interp-cfaes (if0I (numI 0) (numI 1) (numI 2)) (mtSub) (mtSto))
 
 ; fun(x=5){x} => 5
-(interp-cfaer (appI (funI 'x (idI 'x)) (numI 5)) (mtSub))
+(interp-cfaes (appI (funI 'x (idI 'x)) (numI 5)) (mtSub) (mtSto))
 
 ; fun(x=1){x+1} => 2
-(interp-cfaer (appI (funI 'x (binopI 'add (idI 'x) (numI 1))) (numI 1)) (mtSub))
+(interp-cfaes (appI (funI 'x (binopI 'add (idI 'x) (numI 1))) (numI 1)) (mtSub) (mtSto))
 
 ; (3 - 2) != 0 => with x=8, x/2 = 8 / 2 = 4
-(interp-cfaer (if0I (appI (funI 'x (binopI 'sub (idI 'x) (numI 2))) (numI 3)) (appI (funI 'x (binopI 'mul (idI 'x) (numI 2))) (numI 10)) (appI (funI 'x (binopI 'div (idI 'x) (numI 2))) (numI 8))) (mtSub))
+(interp-cfaes (if0I (appI (funI 'x (binopI 'sub (idI 'x) (numI 2))) (numI 3)) (appI (funI 'x (binopI 'mul (idI 'x) (numI 2))) (numI 10)) (appI (funI 'x (binopI 'div (idI 'x) (numI 2))) (numI 8))) (mtSub) (mtSto))
 
 ; 0 == 0 => fun(x=0){x+1} = 1
-(interp-cfaer (appI (if0I (numI 0) (funI 'x (binopI 'add (idI 'x) (numI 1))) (funI 'x (binopI 'add (idI 'x) (numI 2)))) (numI 0)) (mtSub))
+(interp-cfaes (appI (if0I (numI 0) (funI 'x (binopI 'add (idI 'x) (numI 1))) (funI 'x (binopI 'add (idI 'x) (numI 2)))) (numI 0)) (mtSub) (mtSto))
 
 ; x = 2, y = 3; x + y = 5
-(interp-cfaer (appI (funI 'x (appI (funI 'y (binopI 'add (idI 'x) (idI 'y))) (numI 3))) (numI 2)) (mtSub))
+(interp-cfaes (appI (funI 'x (appI (funI 'y (binopI 'add (idI 'x) (idI 'y))) (numI 3))) (numI 2)) (mtSub) (mtSto))
 
 ; Defining the "add one" function
-; (closureV 'x (binopI 'add (idI 'x) (numI 1)) (mtSub))
-(interp-cfaer (funI 'x (binopI 'add (idI 'x) (numI 1))) (mtSub))
+; (closureV 'x (binopI 'add (idI 'x) (numI 1)) (mtSub) (mtSto))
+(interp-cfaes (funI 'x (binopI 'add (idI 'x) (numI 1))) (mtSub) (mtSto))
 
 ; Defining the identity function
-; (closureV 'x (idI 'x) (mtSub))
-(interp-cfaer (funI 'x (idI 'x)) (mtSub))
+; (closureV 'x (idI 'x) (mtSub) (mtSto))
+(interp-cfaes (funI 'x (idI 'x)) (mtSub) (mtSto))
